@@ -1,0 +1,49 @@
+| Comment "
+  Rule   : Network Service Scanning - Web Vulnerability Scanner
+  Tactic : Discovery (TA0007)
+  Tech   : T1046
+  Author : Aedan Podest
+  Tested : BOTS v1 (index=botsv1)
+
+  Two complementary detections:
+    1. Named scanner signatures — fires on a single Suricata alert identifying a
+       known tool (Acunetix, Nikto, Nessus, w3af, sqlmap). One hit is enough.
+    2. Volume-based scanning — fires when a single src_ip triggers 10+ distinct
+       web attack signatures in a 10-minute window, catching unlabelled scanners.
+
+  Adjust the threshold in detection 2 for your environment's baseline alert noise.
+"
+
+| Comment "--- Detection 1: Named scanner tool identified ---"
+index=botsv1 sourcetype=suricata earliest=0 event_type=alert
+    (alert.signature="ET SCAN Acunetix*"
+     OR alert.signature="ET SCAN Nikto*"
+     OR alert.signature="ET SCAN Nessus*"
+     OR alert.signature="ET SCAN w3af*"
+     OR alert.signature="ET SCAN sqlmap*"
+     OR alert.signature="*Scanner Detected*"
+     OR alert.signature="*Vulnerability Scanner*")
+| stats
+    count                       as scanner_alerts,
+    values(alert.signature)     as signatures,
+    values(dest_ip)             as targeted_hosts,
+    values(dest_port)           as targeted_ports
+    by src_ip
+| eval detection="named_scanner"
+| table src_ip, detection, scanner_alerts, signatures, targeted_hosts, targeted_ports
+| sort - scanner_alerts
+
+| Comment "--- Detection 2: Volume-based — many distinct signatures from one source ---"
+index=botsv1 sourcetype=suricata earliest=0 event_type=alert
+| bin _time span=10m
+| stats
+    count                       as total_alerts,
+    dc(alert.signature)         as unique_signatures,
+    values(alert.signature)     as signatures,
+    values(dest_ip)             as targeted_hosts,
+    values(dest_port)           as targeted_ports
+    by _time, src_ip
+| where unique_signatures >= 10
+| eval detection="volume_based"
+| table _time, src_ip, detection, total_alerts, unique_signatures, signatures, targeted_hosts, targeted_ports
+| sort - unique_signatures

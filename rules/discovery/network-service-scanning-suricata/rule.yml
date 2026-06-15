@@ -1,0 +1,85 @@
+title: Network Service Scanning - Web Vulnerability Scanner via Suricata
+id: 9b1d3f5e-7a2c-4e6b-8d0f-2a4c6e8b0d1f
+status: test
+description: |
+  Detects web vulnerability scanner activity using Suricata IDS alerts. Two
+  complementary approaches are used: named scanner detection (a single Suricata
+  signature identifying a known tool fires the alert) and volume-based detection
+  (10+ distinct web attack signatures from a single source IP in 10 minutes,
+  catching unnamed or custom scanners).
+
+  In BOTS v1, 40.80.148.42 conducted an Acunetix Version 6 scan against
+  imreallynotbatman.com (192.168.250.70) before pivoting to brute force the Joomla
+  admin panel. Acunetix generated 48 alerts in a compressed window — the scan
+  precedes the credential attack by minutes, making this detection the earliest
+  possible catch point in the BOTS v1 kill chain.
+
+author: Aedan Podest
+date: 2026-06-15
+references:
+  - https://attack.mitre.org/techniques/T1046/
+  - https://github.com/splunk/botsv1
+
+tags:
+  - attack.discovery
+  - attack.t1046
+
+logsource:
+  category: network
+  product: suricata
+
+detection:
+  selection_named_scanner:
+    event_type: alert
+    alert.signature|startswith:
+      - 'ET SCAN Acunetix'
+      - 'ET SCAN Nikto'
+      - 'ET SCAN Nessus'
+      - 'ET SCAN w3af'
+      - 'ET SCAN sqlmap'
+    alert.category: 'Attempted Information Leak'
+  selection_volume:
+    event_type: alert
+  condition: selection_named_scanner or (selection_volume | count() by src_ip > 10)
+  timeframe: 10m
+
+falsepositives:
+  - Authorised penetration tests — validate src_ip against your approved scanner
+    inventory and pentest schedule before escalating. Named scanner signatures
+    (Acunetix, Nikto) have near-zero false positive rate outside of authorised
+    testing.
+  - Internal vulnerability management platforms (Tenable, Qualys, Rapid7) running
+    scheduled scans — add their source IPs to an allowlist and exclude from the
+    volume-based detection. Named scanner signatures will still fire; suppress
+    by scheduler correlation.
+  - Security researchers scanning from bug bounty programs — check if the target
+    is in scope for an active bug bounty before escalating.
+
+level: medium
+
+response:
+  - Identify whether src_ip is in your authorised scanner inventory. If not,
+    treat as hostile and block immediately at the perimeter.
+  - Review the signatures field to understand what the scanner probed — SQLi,
+    XSS, and CVE-specific signatures indicate the attacker is looking for
+    exploitable vulnerabilities, not just open ports.
+  - Correlate src_ip against other sourcetypes (IIS, stream:http) in the same
+    time window — scanners almost always precede exploitation attempts. In BOTS
+    v1, the Acunetix scan from 40.80.148.42 preceded a Joomla brute force within
+    minutes.
+  - Check targeted_ports — scanning against non-standard ports suggests the
+    attacker is mapping the full attack surface, not just web.
+  - Preserve Suricata alert logs and any corresponding IIS/proxy logs for the
+    full session window.
+
+bots_evidence:
+  dataset: botsv1
+  validated: true
+  search: 'index=botsv1 sourcetype=suricata earliest=0 event_type=alert alert.signature="ET SCAN Acunetix*" | stats count by src_ip, dest_ip | sort -count'
+  findings: |
+    40.80.148.42 generated 48 Acunetix scanner alerts against 192.168.250.70
+    (imreallynotbatman.com). This is the same IP that subsequently sent 10 POST
+    requests to /joomla/administrator/index.php (see brute-force-web-cms-admin
+    rule). The scan precedes the login attack, placing this detection at the
+    earliest point in the BOTS v1 kill chain — catching it here stops the
+    brute force before it starts.
