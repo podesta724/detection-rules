@@ -1,0 +1,37 @@
+| Comment "
+  Rule   : Web Shell Access - PHP File Outside CMS Core Paths
+  Tactic : Persistence (TA0003)
+  Tech   : T1505.003
+  Author : Aedan Podest
+  Tested : BOTS v1 (index=botsv1)
+
+  Detects repeated access to PHP files that sit outside standard CMS component
+  directories (components, modules, plugins, templates, libraries). Legitimate
+  CMS files live in known subdirectories — a standalone PHP file in the web root
+  or CMS root with sustained traffic from a single IP is a strong web shell signal.
+
+  Threshold of 5 requests is intentionally low. A web shell only needs to be
+  hit once to be dangerous; repeated access confirms active use.
+"
+
+index=botsv1 sourcetype=iis earliest=0 cs_method=GET
+| where match(cs_uri_stem, "\.php$")
+| where NOT match(cs_uri_stem, "\/components\/")
+    AND NOT match(cs_uri_stem, "\/modules\/")
+    AND NOT match(cs_uri_stem, "\/plugins\/")
+    AND NOT match(cs_uri_stem, "\/templates\/")
+    AND NOT match(cs_uri_stem, "\/libraries\/")
+    AND NOT match(cs_uri_stem, "\/includes\/")
+    AND NOT match(cs_uri_stem, "\/administrator\/")
+    AND NOT match(cs_uri_stem, "\/index\.php$")
+| rex field=cs_uri_stem "\/(?<filename>[^\/]+\.php)$"
+| bin _time span=1h
+| stats
+    count                       as access_count,
+    values(c_ip)                as source_ips,
+    dc(c_ip)                    as unique_ips,
+    values(cs_uri_query)        as uri_params
+    by _time, cs_uri_stem, filename, host
+| where access_count >= 5
+| table _time, host, cs_uri_stem, filename, access_count, unique_ips, source_ips, uri_params
+| sort - access_count

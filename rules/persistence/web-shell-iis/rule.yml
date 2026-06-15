@@ -1,0 +1,84 @@
+title: Web Shell Access - PHP File Outside CMS Core Paths
+id: 3e5a7c9b-1d2f-4e6a-8b0c-4f6a8c0e2b4d
+status: test
+description: |
+  Detects repeated GET requests to PHP files located outside standard CMS core
+  directories (components, modules, plugins, templates, libraries, includes).
+  Attackers who gain CMS admin access upload web shells to the web root or a
+  writable directory, then interact with them via HTTP GET requests, passing
+  commands as URL parameters.
+
+  In BOTS v1, 23.22.63.114 uploaded agent.php to /joomla/ after successfully
+  brute-forcing the Joomla admin panel, then issued 194 GET requests to execute
+  commands on the server. The file name (agent.php) and location (CMS root, not
+  a CMS component directory) are both indicators — no legitimate Joomla file
+  sits there.
+
+author: Aedan Podest
+date: 2026-06-15
+references:
+  - https://attack.mitre.org/techniques/T1505/003/
+  - https://github.com/splunk/botsv1
+
+tags:
+  - attack.persistence
+  - attack.t1505.003
+
+logsource:
+  category: webserver
+  product: iis
+
+detection:
+  selection:
+    cs_method: GET
+    cs_uri_stem|endswith: '.php'
+  filter_cms_paths:
+    cs_uri_stem|contains:
+      - '/components/'
+      - '/modules/'
+      - '/plugins/'
+      - '/templates/'
+      - '/libraries/'
+      - '/includes/'
+      - '/administrator/'
+  condition: selection and not filter_cms_paths | count() by cs_uri_stem > 5
+  timeframe: 1h
+
+falsepositives:
+  - Custom PHP scripts legitimately deployed in the web root by developers —
+    maintain a whitelist of known deployed files and suppress by cs_uri_stem.
+  - Monitoring or health-check scripts accessed by internal IPs — filter by
+    c_ip against your internal IP ranges.
+  - Third-party integrations that install PHP files in non-standard locations —
+    review source_ips; if access is exclusively from internal or known partner
+    IPs it is likely benign.
+
+level: high
+
+response:
+  - Treat any confirmed web shell as an active compromise. The attacker has
+    arbitrary code execution on the web server.
+  - Immediately take the affected host offline or isolate at the network level
+    to stop active command execution.
+  - Retrieve the web shell file and preserve it for forensic analysis — it may
+    contain hardcoded attacker infrastructure (C2 IPs, passwords).
+  - Review uri_params in the alert — URL parameters passed to a web shell are
+    the commands the attacker ran. Reconstruct the command history to determine
+    what was executed.
+  - Check for follow-on activity: new user accounts, scheduled tasks, registry
+    run keys, lateral movement attempts, and data staged for exfiltration.
+  - Correlate with the brute-force-web-cms-admin rule — if the same src_ip
+    appears in both alerts, the access chain is confirmed (brute force → upload
+    → shell execution).
+
+bots_evidence:
+  dataset: botsv1
+  validated: true
+  search: 'index=botsv1 sourcetype=iis earliest=0 cs_uri_stem="/joomla/agent.php" | stats count by c_ip, cs_method | sort -count'
+  findings: |
+    23.22.63.114 issued 194 GET requests to /joomla/agent.php — the same IP
+    responsible for the 412-attempt Joomla brute force. agent.php is not part
+    of the Joomla core and has no legitimate reason to exist in the /joomla/
+    root directory. 194 GET requests confirms active, sustained shell use rather
+    than a one-time probe. This is the third consecutive detection of 23.22.63.114
+    in the BOTS v1 kill chain (scan → brute force → web shell).

@@ -20,5 +20,6 @@ rules/
 | Brute Force - Password Guessing | Credential Access | T1110.001 | — | [rule.yml](rules/credential-access/brute-force-password-guessing/rule.yml) | [rule.spl](rules/credential-access/brute-force-password-guessing/rule.spl) |
 | Brute Force - Web CMS Admin Login | Credential Access | T1110.001 | BOTSv1 | [rule.yml](rules/credential-access/brute-force-web-cms-admin/rule.yml) | [rule.spl](rules/credential-access/brute-force-web-cms-admin/rule.spl) |
 | Network Service Scanning - Web Vulnerability Scanner | Discovery | T1046 | BOTSv1 | [rule.yml](rules/discovery/network-service-scanning-suricata/rule.yml) | [rule.spl](rules/discovery/network-service-scanning-suricata/rule.spl) |
+| Web Shell Access - PHP File Outside CMS Core Paths | Persistence | T1505.003 | BOTSv1 | [rule.yml](rules/persistence/web-shell-iis/rule.yml) | [rule.spl](rules/persistence/web-shell-iis/rule.spl) |
 
 *Status: In progress*
