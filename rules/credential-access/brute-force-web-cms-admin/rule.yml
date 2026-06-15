@@ -65,10 +65,17 @@ response:
 
 bots_evidence:
   dataset: botsv1
+  validated: true
   search: 'index=botsv1 sourcetype=iis earliest=0 cs_method=POST cs_uri_stem="/joomla/administrator/index.php" | stats count by c_ip | sort -count'
   findings: |
-    23.22.63.114 generated 412 POST requests to /joomla/administrator/index.php
-    against imreallynotbatman.com. The next closest source (40.80.148.42) sent
-    only 19 requests. The 23.22.63.114 burst is isolated to a short time window
-    with a consistent user agent, consistent with automated credential guessing
-    tooling. This IP is the primary attacker throughout the BOTS v1 scenario.
+    Rule fires on two sources in a single 5-minute window (2016-08-10 17:45:00):
+
+    23.22.63.114 — 412 POSTs, user agent: Python-urllib/2.7
+      The Python urllib user agent is unambiguous evidence of automated tooling.
+      No legitimate user authenticates to a CMS admin panel via Python's HTTP
+      library. This is the primary attacker throughout the BOTS v1 scenario.
+
+    40.80.148.42 — 10 POSTs, user agent: Mozilla/5.0 (IE 11)
+      Sits exactly at the detection threshold with a browser user agent — likely
+      manual probing or a different tool masquerading as a browser. Worth
+      investigating alongside 23.22.63.114 as a secondary actor.
