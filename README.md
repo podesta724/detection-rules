@@ -21,4 +21,4 @@ rules/
 | Brute Force - Web CMS Admin Login | Credential Access | T1110.001 | BOTSv1 | [rule.yml](rules/credential-access/brute-force-web-cms-admin/rule.yml) | [rule.spl](rules/credential-access/brute-force-web-cms-admin/rule.spl) |
 | Network Service Scanning - Web Vulnerability Scanner | Discovery | T1046 | BOTSv1 | [rule.yml](rules/discovery/network-service-scanning-suricata/rule.yml) | [rule.spl](rules/discovery/network-service-scanning-suricata/rule.spl) |
 
-*Status: In progress — first batch of rules landing soon.*
+*Status: In progress*
