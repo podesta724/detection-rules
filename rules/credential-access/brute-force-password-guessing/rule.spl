@@ -1,0 +1,28 @@
+| Comment "
+  Rule   : Brute Force - Password Guessing
+  Tactic : Credential Access (TA0006)
+  Tech   : T1110.001
+  Author : Aedan Podest
+  Tested : BOTS v1 (index=botsv1)
+
+  Replace index/sourcetype values to match your environment.
+  Threshold of 20 failures in 5 minutes is tuned for BOTS v1 — lower to 10 for
+  higher-sensitivity environments or where logon volumes are lower.
+"
+
+index=botsv1 sourcetype="WinEventLog:Security" EventCode=4625
+| bin _time span=5m
+| stats
+    count                       as failed_logins,
+    dc(Account_Name)            as unique_accounts,
+    values(Account_Name)        as targeted_accounts,
+    values(Logon_Type)          as logon_types
+    by _time, IpAddress, ComputerName
+| where failed_logins >= 20
+| eval attack_type=case(
+    unique_accounts >= 5, "password_spray",
+    unique_accounts  < 5, "brute_force",
+    true(),                "unknown"
+)
+| table _time, IpAddress, ComputerName, attack_type, failed_logins, unique_accounts, targeted_accounts, logon_types
+| sort - failed_logins

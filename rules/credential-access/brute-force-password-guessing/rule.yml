@@ -1,0 +1,68 @@
+title: Brute Force - Password Guessing via Windows Failed Logons
+id: 7f3a1c2e-4b5d-4e8f-9a0b-1c2d3e4f5a6b
+status: test
+description: |
+  Detects a high volume of failed Windows logon attempts (EventID 4625) from a single
+  source IP within a 5-minute window. A spike of 20+ failures indicates automated
+  credential guessing. The attack_type field distinguishes brute force (single account,
+  many passwords) from password spraying (many accounts, few passwords).
+
+  In BOTS v1, the attacker at 23.22.63.114 generated hundreds of 4625 events against
+  the Wayne Enterprises web server before successfully authenticating. The burst pattern
+  — near-zero failures baseline, then sudden spike — is the clearest signal in the
+  entire dataset.
+
+author: Aedan Podest
+date: 2026-06-15
+references:
+  - https://attack.mitre.org/techniques/T1110/001/
+  - https://github.com/splunk/botsv1
+
+tags:
+  - attack.credential_access
+  - attack.t1110.001
+
+logsource:
+  product: windows
+  service: security
+
+detection:
+  selection:
+    EventID: 4625
+  condition: selection | count() by IpAddress > 20
+  timeframe: 5m
+
+falsepositives:
+  - Users repeatedly failing MFA or SSO redirects can generate 4625 bursts — check
+    Logon_Type; type 3 (network) with a single account and no MFA context is suspicious,
+    type 10 (remote interactive) less so without RDP context.
+  - Vulnerability scanners and password audit tools run by IT — correlate src IP against
+    your scanner inventory before escalating.
+  - Service accounts with expired or misconfigured credentials looping on startup —
+    these typically show a single Account_Name with a consistent ComputerName and
+    stop after a reboot or config fix.
+  - Kerberos pre-authentication failures log as 4771, not 4625 — if volume is high
+    but 4625 count is low, check for 4771 separately.
+
+level: medium
+
+response:
+  - Block the source IP at the perimeter firewall and proxy if not already blocked by
+    your SIEM alert.
+  - Check whether any logon succeeded after the failure burst — query EventCode=4624
+    from the same IpAddress in the same window. A success after many failures is
+    likely compromise.
+  - Identify all accounts in targeted_accounts and force a password reset if a
+    subsequent 4624 is found.
+  - Review Logon_Type values — type 3 (SMB/network shares) suggests lateral movement
+    intent; type 10 (RDP) suggests direct remote access attempt.
+  - Preserve the 4625 events and any associated 4624 for forensic chain of custody.
+
+bots_evidence:
+  dataset: botsv1
+  search: 'index=botsv1 sourcetype="WinEventLog:Security" EventCode=4625 | stats count by IpAddress | sort -count'
+  findings: |
+    23.22.63.114 generated the overwhelming majority of 4625 events in the dataset,
+    far exceeding any other source. The burst occurs in a compressed time window with
+    multiple targeted accounts, consistent with automated tooling. A subsequent 4624
+    from the same IP confirms successful authentication after the brute force.
