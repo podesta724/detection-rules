@@ -1,0 +1,29 @@
+| Comment "
+  Rule   : Brute Force - Web CMS Admin Login
+  Tactic : Credential Access (TA0006)
+  Tech   : T1110.001
+  Author : Aedan Podest
+  Tested : BOTS v1 (index=botsv1)
+
+  Detects repeated POST requests to common CMS admin login pages from a single
+  source IP within a 5-minute window. Threshold of 10 POSTs in 5 minutes is
+  conservative — lower to 5 in lower-traffic environments.
+
+  Covers: Joomla (/administrator/index.php), WordPress (/wp-login.php),
+          generic admin panels (/admin/, /login.php)
+"
+
+index=botsv1 sourcetype=iis earliest=0 cs_method=POST
+    (cs_uri_stem="*/administrator/index.php"
+     OR cs_uri_stem="/wp-login.php"
+     OR cs_uri_stem="*/admin/index.php"
+     OR cs_uri_stem="*/login.php")
+| bin _time span=5m
+| stats
+    count                       as login_attempts,
+    values(cs_uri_stem)         as targeted_paths,
+    values(cs_User_Agent)       as user_agents
+    by _time, c_ip, host
+| where login_attempts >= 10
+| table _time, c_ip, host, login_attempts, targeted_paths, user_agents
+| sort - login_attempts

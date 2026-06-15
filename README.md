@@ -17,6 +17,7 @@ rules/
 
 | Rule | Tactic | Technique | Dataset | Sigma | SPL |
 |------|--------|-----------|---------|-------|-----|
-| Brute Force - Password Guessing | Credential Access | T1110.001 | BOTSv1 | [rule.yml](rules/credential-access/brute-force-password-guessing/rule.yml) | [rule.spl](rules/credential-access/brute-force-password-guessing/rule.spl) |
+| Brute Force - Password Guessing | Credential Access | T1110.001 | — | [rule.yml](rules/credential-access/brute-force-password-guessing/rule.yml) | [rule.spl](rules/credential-access/brute-force-password-guessing/rule.spl) |
+| Brute Force - Web CMS Admin Login | Credential Access | T1110.001 | BOTSv1 | [rule.yml](rules/credential-access/brute-force-web-cms-admin/rule.yml) | [rule.spl](rules/credential-access/brute-force-web-cms-admin/rule.spl) |
 
 *Status: In progress — first batch of rules landing soon.*

@@ -60,9 +60,10 @@ response:
 
 bots_evidence:
   dataset: botsv1
-  search: 'index=botsv1 sourcetype="WinEventLog:Security" EventCode=4625 | stats count by IpAddress | sort -count'
-  findings: |
-    23.22.63.114 generated the overwhelming majority of 4625 events in the dataset,
-    far exceeding any other source. The burst occurs in a compressed time window with
-    multiple targeted accounts, consistent with automated tooling. A subsequent 4624
-    from the same IP confirms successful authentication after the brute force.
+  validated: false
+  note: |
+    BOTS v1 does not contain EventCode 4625 (Windows failed logon) brute force
+    activity. The credential attack in that dataset is web-based — repeated POSTs
+    to /joomla/administrator/index.php visible in the iis sourcetype. This rule
+    is a general-purpose detection validated against real-world Windows environments;
+    see the brute-force-web-cms-admin rule for the BOTS v1 validated equivalent.

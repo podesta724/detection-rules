@@ -1,0 +1,74 @@
+title: Brute Force - Web CMS Admin Login Panel
+id: 2c4e6a8b-0d1f-4e3c-b5a7-9e8f7d6c5b4a
+status: test
+description: |
+  Detects a high volume of HTTP POST requests to common CMS admin login pages
+  (Joomla, WordPress, generic admin panels) from a single source IP within a
+  5-minute window. CMS admin panels return HTTP 200 on both success and failure,
+  so status code alone cannot distinguish brute force — raw POST volume is the
+  reliable signal.
+
+  In BOTS v1, 23.22.63.114 sent 412 POST requests to
+  /joomla/administrator/index.php against imreallynotbatman.com (Wayne Enterprises
+  Joomla site). The burst is unmistakable — no legitimate user generates 400+
+  login attempts in minutes.
+
+author: Aedan Podest
+date: 2026-06-15
+references:
+  - https://attack.mitre.org/techniques/T1110/001/
+  - https://github.com/splunk/botsv1
+
+tags:
+  - attack.credential_access
+  - attack.t1110.001
+
+logsource:
+  category: webserver
+  product: iis
+
+detection:
+  selection:
+    cs_method: POST
+    cs_uri_stem|contains:
+      - '/administrator/index.php'
+      - '/wp-login.php'
+      - '/admin/index.php'
+      - '/login.php'
+  condition: selection | count() by c_ip > 10
+  timeframe: 5m
+
+falsepositives:
+  - Automated site health checks or uptime monitors that POST to login pages —
+    check the user_agents field; monitoring tools typically use recognisable
+    agent strings and come from known IPs.
+  - Password manager browser extensions that retry login on session timeout —
+    volume rarely exceeds 5 attempts, well below the threshold.
+  - Penetration testers running authorised credential sprays — validate src IP
+    against your approved scanner inventory before escalating.
+
+level: medium
+
+response:
+  - Block c_ip at the perimeter firewall and WAF immediately if not already
+    blocked by automated controls.
+  - Check whether any subsequent requests from c_ip returned a redirect (302/303)
+    after the burst — that indicates a successful login. In IIS logs, extract
+    sc_status from _raw using rex to confirm.
+  - If a successful login is found, treat the CMS admin account as compromised:
+    force a password reset, revoke active sessions, and audit recent admin
+    activity (plugin installs, file uploads, template changes).
+  - Review the targeted_paths field — if the attacker probed multiple admin paths,
+    they may have fingerprinted the CMS before the brute force, suggesting a
+    more deliberate attack.
+  - Preserve IIS logs for the full session window for forensic chain of custody.
+
+bots_evidence:
+  dataset: botsv1
+  search: 'index=botsv1 sourcetype=iis earliest=0 cs_method=POST cs_uri_stem="/joomla/administrator/index.php" | stats count by c_ip | sort -count'
+  findings: |
+    23.22.63.114 generated 412 POST requests to /joomla/administrator/index.php
+    against imreallynotbatman.com. The next closest source (40.80.148.42) sent
+    only 19 requests. The 23.22.63.114 burst is isolated to a short time window
+    with a consistent user agent, consistent with automated credential guessing
+    tooling. This IP is the primary attacker throughout the BOTS v1 scenario.
