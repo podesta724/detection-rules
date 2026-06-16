@@ -1,0 +1,78 @@
+title: Web Shell Command Execution via PHP-CGI
+id: 7f2a1d4e-9c3b-4f8a-b6e0-2d5c8a1f3e7b
+status: test
+description: |
+  Detects cmd.exe spawned by php-cgi.exe, indicating a PHP web shell executing
+  OS commands via PHP's system() or exec() functions. When IIS handles a PHP
+  request it spawns php-cgi.exe to process the file; if that file is a web shell,
+  php-cgi.exe will in turn spawn cmd.exe with the attacker's command as arguments.
+  This parent-child chain has no legitimate use in normal IIS/PHP-CGI operation.
+
+  In BOTS v1, after uploading agent.php via the Joomla admin panel, the attacker
+  sent GET requests that caused php-cgi.exe to spawn cmd.exe 17 times between
+  17:55 and 18:21 on 2016-08-10. Commands included directory recon (dir),
+  Linux-habit mistakes (ls, ifconfig), execution of a dropped binary (3791.exe),
+  and file manipulation to stage the website defacement (imnotbatman.jpg).
+
+author: Aedan Podest
+date: 2026-06-16
+references:
+  - https://attack.mitre.org/techniques/T1059/003/
+  - https://github.com/splunk/botsv1
+
+tags:
+  - attack.execution
+  - attack.t1059.003
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  selection:
+    EventID: 1
+    ParentImage|endswith: '\php-cgi.exe'
+    Image|endswith: '\cmd.exe'
+  condition: selection
+
+falsepositives:
+  - None expected. php-cgi.exe spawning cmd.exe has no legitimate use in normal
+    IIS/PHP operation — PHP FastCGI processes PHP files internally without ever
+    needing a command shell child process. Any match should be treated as confirmed
+    web shell activity until proven otherwise.
+
+level: critical
+
+response:
+  - Treat any match as active compromise with arbitrary OS command execution on
+    the web server — escalate immediately.
+  - Isolate the host at the network level to stop active attacker interaction
+    before doing anything else.
+  - Capture the CommandLine field from the alert — it contains the exact command
+    the attacker ran via the web shell. Reconstruct the full command history by
+    pivoting on ParentProcessGuid to group all cmd.exe children from the same
+    php-cgi.exe instance.
+  - Look for the web shell file: correlate the alert timestamp with IIS logs
+    (sourcetype=iis) to identify which PHP file was being requested when cmd.exe
+    spawned. That file is the web shell.
+  - Check for dropped binaries: any CommandLine containing a bare executable name
+    (e.g. 3791.exe) indicates a file was uploaded to the server prior to execution.
+    Locate and preserve that file for malware analysis.
+  - Check for file manipulation commands (move, copy, del, rename) — attackers
+    frequently stage exfiltration data or replace web content (defacement) via
+    web shell file operations.
+  - Correlate with the web-shell-iis and brute-force-web-cms-admin rules to
+    reconstruct the full access chain: brute force → web shell upload → execution.
+
+bots_evidence:
+  dataset: botsv1
+  validated: true
+  search: 'index=botsv1 sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" earliest=0 "<EventID>1</EventID>" "php-cgi.exe" "cmd.exe" | rex field=_raw "<Data Name=''Image''>(?<Image>[^<]+)</Data>" | rex field=_raw "<Data Name=''ParentImage''>(?<ParentImage>[^<]+)</Data>" | rex field=_raw "<Data Name=''CommandLine''>(?<CommandLine>[^<]+)</Data>" | search ParentImage="*php-cgi*" Image="*cmd.exe*" | table _time, Image, ParentImage, CommandLine | sort _time'
+  findings: |
+    17 instances of cmd.exe spawned by php-cgi.exe on we1149srv between 17:55
+    and 18:21 on 2016-08-10. Commands reveal the full attacker workflow: shell
+    connectivity tests (echo 24365, echo 63059), recon (dir repeated 7 times),
+    Linux-habit mistakes (ls, ifconfig — attacker forgot they were on Windows),
+    payload execution (3791.exe — the ransomware dropper), file staging
+    (move ..\1.jpeg 2.jpeg), and defacement (move 2.jpeg imnotbatman.jpg).
+    This is the same session as the 194 agent.php GET requests visible in IIS logs.

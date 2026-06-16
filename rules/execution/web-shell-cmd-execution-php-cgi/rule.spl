@@ -1,0 +1,30 @@
+| Comment "
+  Rule   : Web Shell Command Execution via PHP-CGI
+  Tactic : Execution (TA0002)
+  Tech   : T1059.003 - Command and Scripting Interpreter: Windows Command Shell
+  Author : Aedan Podest
+  Tested : BOTS v1 (index=botsv1)
+
+  Detects cmd.exe spawned by php-cgi.exe — the process chain produced when a
+  PHP web shell calls system() or exec() to run OS commands. IIS spawns php-cgi.exe
+  to handle PHP requests; php-cgi.exe spawning cmd.exe only happens when PHP code
+  explicitly invokes a command shell. This chain has no legitimate use in normal
+  IIS/PHP-CGI operation.
+
+  NOTE: In BOTS v1, Sysmon fields are stored as raw XML and are not extracted
+  by Splunk. This search uses rex to pull Image, ParentImage, and CommandLine
+  from _raw. In a production environment with Sysmon field extraction configured,
+  replace the rex commands with direct field references (ParentImage, Image,
+  CommandLine) and remove the keyword pre-filter.
+"
+
+index=botsv1 sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" earliest=0
+    "<EventID>1</EventID>" "php-cgi.exe" "cmd.exe"
+| rex field=_raw "<Data Name='Image'>(?<Image>[^<]+)</Data>"
+| rex field=_raw "<Data Name='ParentImage'>(?<ParentImage>[^<]+)</Data>"
+| rex field=_raw "<Data Name='CommandLine'>(?<CommandLine>[^<]+)</Data>"
+| rex field=_raw "<Computer>(?<Computer>[^<]+)</Computer>"
+| where like(lower(ParentImage), "%php-cgi.exe")
+    AND like(lower(Image), "%cmd.exe")
+| table _time, Computer, ParentImage, Image, CommandLine
+| sort _time
